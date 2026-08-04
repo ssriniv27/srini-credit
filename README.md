@@ -4,6 +4,11 @@ Srini Credit is a corporate credit-analysis application that evaluates a public 
 
 The application analyzes liquidity, leverage, profitability, cash flow, market risk, and historical financial trends. It then assigns a credit tier, identifies strengths and warning signals, and generates a downloadable analyst report.
 
+## Live Application
+
+Try Srini Credit here:
+
+[Open the Srini Credit Dashboard](https://srinicredit.streamlit.app/)
 ## Features
 
 - Company analysis by stock ticker
