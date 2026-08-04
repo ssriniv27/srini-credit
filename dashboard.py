@@ -7,8 +7,8 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 import streamlit as st
+API_KEY = st.secrets["API_KEY"]
 
-from config import API_KEY
 from credit_engine import (
     FinancialDataError,
     UnsupportedTickerError,
