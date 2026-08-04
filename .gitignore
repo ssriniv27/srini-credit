@@ -1,0 +1,19 @@
+# Private API keys
+config.py
+.streamlit/secrets.toml
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# PyCharm settings
+.idea/
+
+# Generated reports
+reports/
+*_srini_credit_memo_*.txt
+*_srini_credit_memo_*.pdf
+
+# Virtual environment
+.venv/
+venv/
