@@ -311,6 +311,198 @@ def _clean_historical_prices(
     return cleaned_history
 
 
+
+# -----------------------------------------------------------------------------
+# Experimental industry scoring profiles
+# -----------------------------------------------------------------------------
+# These thresholds are internal Srini Credit calibration choices. They are not
+# official agency methodologies or published default-probability standards.
+
+SCORING_PROFILES: dict[str, dict[str, Any]] = {
+    "default": {
+        "name": "Default Corporate",
+        "current_ratio": ((2.00, 10), (1.50, 8), (1.00, 5), (0.75, 2)),
+        "quick_ratio": ((1.50, 10), (1.20, 8), (1.00, 6), (0.75, 3)),
+        "debt_to_equity": ((0.25, 10), (0.50, 8), (1.00, 6), (1.50, 3), (2.00, 1)),
+        "debt_to_ebitda": ((1.00, 15), (2.00, 12), (3.00, 9), (4.00, 6), (5.00, 3)),
+        "ebitda_margin": ((0.30, 8), (0.20, 6), (0.10, 4)),
+        "net_margin": ((0.20, 8), (0.10, 6), (0.05, 4)),
+        "operating_cash_flow_margin": ((0.20, 8), (0.12, 6), (0.05, 4)),
+        "free_cash_flow_margin": ((0.15, 8), (0.08, 6), (0.03, 4)),
+        "liquidity_warning_threshold": 1.00,
+        "debt_warning_threshold": 4.00,
+        "description": (
+            "General nonfinancial corporate thresholds are used because no "
+            "specialized industry profile matched the company."
+        ),
+    },
+    "technology": {
+        "name": "Technology",
+        "current_ratio": ((2.00, 10), (1.50, 8), (1.00, 5), (0.75, 2)),
+        "quick_ratio": ((1.50, 10), (1.20, 8), (1.00, 6), (0.75, 3)),
+        "debt_to_equity": ((0.25, 10), (0.50, 8), (1.00, 6), (1.50, 3), (2.00, 1)),
+        "debt_to_ebitda": ((1.00, 15), (2.00, 12), (3.00, 9), (4.00, 6), (5.00, 3)),
+        "ebitda_margin": ((0.35, 8), (0.25, 6), (0.15, 4)),
+        "net_margin": ((0.25, 8), (0.15, 6), (0.08, 4)),
+        "operating_cash_flow_margin": ((0.25, 8), (0.15, 6), (0.08, 4)),
+        "free_cash_flow_margin": ((0.20, 8), (0.12, 6), (0.06, 4)),
+        "liquidity_warning_threshold": 1.00,
+        "debt_warning_threshold": 4.00,
+        "description": (
+            "Technology companies are evaluated with higher profitability and "
+            "cash-flow expectations because many mature firms in the sector "
+            "operate asset-light, high-margin business models."
+        ),
+    },
+    "discount_retail": {
+        "name": "Discount Retail",
+        "current_ratio": ((1.30, 10), (1.00, 8), (0.80, 6), (0.65, 3)),
+        "quick_ratio": ((0.80, 10), (0.60, 8), (0.40, 6), (0.20, 3)),
+        "debt_to_equity": ((0.25, 10), (0.50, 8), (1.00, 6), (1.50, 3), (2.00, 1)),
+        "debt_to_ebitda": ((1.00, 15), (2.00, 12), (3.00, 9), (4.00, 6), (5.00, 3)),
+        "ebitda_margin": ((0.10, 8), (0.07, 6), (0.04, 4)),
+        "net_margin": ((0.05, 8), (0.035, 6), (0.02, 4)),
+        "operating_cash_flow_margin": ((0.08, 8), (0.05, 6), (0.03, 4)),
+        "free_cash_flow_margin": ((0.05, 8), (0.03, 6), (0.015, 4)),
+        "liquidity_warning_threshold": 0.75,
+        "debt_warning_threshold": 4.00,
+        "description": (
+            "Discount retailers are evaluated with lower liquidity and margin "
+            "thresholds to reflect rapid inventory turnover and high-volume, "
+            "low-margin operating models."
+        ),
+    },
+    "consumer_staples": {
+        "name": "Consumer Staples",
+        "current_ratio": ((1.50, 10), (1.20, 8), (0.90, 5), (0.70, 2)),
+        "quick_ratio": ((1.00, 10), (0.80, 8), (0.60, 6), (0.40, 3)),
+        "debt_to_equity": ((0.25, 10), (0.50, 8), (1.00, 6), (1.50, 3), (2.00, 1)),
+        "debt_to_ebitda": ((1.00, 15), (2.00, 12), (3.00, 9), (4.00, 6), (5.00, 3)),
+        "ebitda_margin": ((0.25, 8), (0.18, 6), (0.10, 4)),
+        "net_margin": ((0.15, 8), (0.10, 6), (0.05, 4)),
+        "operating_cash_flow_margin": ((0.15, 8), (0.10, 6), (0.05, 4)),
+        "free_cash_flow_margin": ((0.10, 8), (0.07, 6), (0.03, 4)),
+        "liquidity_warning_threshold": 0.80,
+        "debt_warning_threshold": 4.00,
+        "description": (
+            "Consumer-staples companies are evaluated with thresholds that "
+            "recognize stable demand, moderate margins, and working-capital "
+            "structures that can differ from technology firms."
+        ),
+    },
+    "telecommunications": {
+        "name": "Telecommunications",
+        "current_ratio": ((1.20, 10), (1.00, 8), (0.75, 5), (0.60, 2)),
+        "quick_ratio": ((1.00, 10), (0.80, 8), (0.60, 6), (0.40, 3)),
+        "debt_to_equity": ((0.50, 10), (1.00, 8), (2.00, 6), (3.00, 3), (4.00, 1)),
+        "debt_to_ebitda": ((2.00, 15), (3.00, 12), (4.00, 9), (5.00, 6), (6.00, 3)),
+        "ebitda_margin": ((0.30, 8), (0.22, 6), (0.15, 4)),
+        "net_margin": ((0.12, 8), (0.07, 6), (0.03, 4)),
+        "operating_cash_flow_margin": ((0.25, 8), (0.18, 6), (0.10, 4)),
+        "free_cash_flow_margin": ((0.15, 8), (0.10, 6), (0.05, 4)),
+        "liquidity_warning_threshold": 0.75,
+        "debt_warning_threshold": 5.00,
+        "description": (
+            "Telecommunications companies are evaluated with moderately more "
+            "tolerant leverage thresholds because recurring subscription cash "
+            "flows often support capital-intensive balance sheets."
+        ),
+    },
+    "energy": {
+        "name": "Integrated Energy",
+        "current_ratio": ((1.50, 10), (1.20, 8), (1.00, 5), (0.75, 2)),
+        "quick_ratio": ((1.20, 10), (1.00, 8), (0.80, 6), (0.60, 3)),
+        "debt_to_equity": ((0.25, 10), (0.50, 8), (1.00, 6), (1.50, 3), (2.00, 1)),
+        "debt_to_ebitda": ((1.00, 15), (2.00, 12), (3.00, 9), (4.00, 6), (5.00, 3)),
+        "ebitda_margin": ((0.25, 8), (0.18, 6), (0.10, 4)),
+        "net_margin": ((0.15, 8), (0.08, 6), (0.04, 4)),
+        "operating_cash_flow_margin": ((0.20, 8), (0.12, 6), (0.06, 4)),
+        "free_cash_flow_margin": ((0.12, 8), (0.07, 6), (0.03, 4)),
+        "liquidity_warning_threshold": 0.90,
+        "debt_warning_threshold": 4.50,
+        "description": (
+            "Integrated energy companies are evaluated with thresholds that "
+            "recognize commodity cyclicality and capital-intensive operations."
+        ),
+    },
+}
+
+
+def _score_higher_is_better(
+    value: float,
+    bands: tuple[tuple[float, int], ...],
+    positive_fallback: int = 0,
+) -> int:
+    """Score a metric where larger values are generally stronger."""
+
+    for minimum_value, points in bands:
+        if value >= minimum_value:
+            return points
+
+    if value > 0:
+        return positive_fallback
+    return 0
+
+
+def _score_lower_is_better(
+    value: float,
+    bands: tuple[tuple[float, int], ...],
+) -> int:
+    """Score a metric where smaller values are generally stronger."""
+
+    for maximum_value, points in bands:
+        if value <= maximum_value:
+            return points
+    return 0
+
+
+def _select_scoring_profile(sector: str, industry: str) -> tuple[str, dict[str, Any]]:
+    """Select an experimental scoring profile from FMP sector/industry text."""
+
+    sector_text = sector.lower()
+    industry_text = industry.lower()
+
+    if "discount stores" in industry_text:
+        key = "discount_retail"
+    elif "telecommunication" in industry_text:
+        key = "telecommunications"
+    elif sector_text == "consumer defensive":
+        key = "consumer_staples"
+    elif sector_text == "energy" or "oil & gas" in industry_text:
+        key = "energy"
+    elif sector_text == "technology":
+        key = "technology"
+    else:
+        key = "default"
+
+    return key, SCORING_PROFILES[key]
+
+
+def _get_model_scope_warning(sector: str, industry: str) -> str | None:
+    """Return a warning when the standard model needs specialized analysis."""
+
+    sector_text = sector.lower()
+    industry_text = industry.lower()
+
+    if sector_text == "financial services" or any(
+        term in industry_text
+        for term in ("bank", "insurance", "asset management", "credit services")
+    ):
+        return (
+            "Specialized-model warning: banks, insurers, and other financial "
+            "institutions require capital, reserve, and regulatory ratios that "
+            "are not included in the standard Srini Credit model."
+        )
+
+    if "auto - manufacturers" in industry_text or "automobile manufacturers" in industry_text:
+        return (
+            "Specialized-model warning: automakers may include captive-finance "
+            "operations, so consolidated debt and EBITDA can be difficult to "
+            "compare with ordinary industrial companies."
+        )
+
+    return None
+
 def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     """Run the complete Srini Credit analysis and return all report data."""
 
@@ -342,6 +534,13 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         or "Unavailable"
     )
     ceo = company.get("ceo") or "Unavailable"
+
+    scoring_profile_key, scoring_profile = _select_scoring_profile(
+        sector, industry
+    )
+    scoring_profile_name = scoring_profile["name"]
+    scoring_profile_description = scoring_profile["description"]
+    model_scope_warning = _get_model_scope_warning(sector, industry)
 
     stock_price = company.get("price")
     stock_price_text = (
@@ -638,78 +837,37 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"Net-Margin Trend\n{net_margin_trend_text}"
     )
 
-    # Category scoring
-    if current_ratio >= 2.0:
-        current_ratio_score = 10
-    elif current_ratio >= 1.5:
-        current_ratio_score = 8
-    elif current_ratio >= 1.0:
-        current_ratio_score = 5
-    elif current_ratio >= 0.75:
-        current_ratio_score = 2
-    else:
-        current_ratio_score = 0
-
-    if quick_ratio >= 1.5:
-        quick_ratio_score = 10
-    elif quick_ratio >= 1.2:
-        quick_ratio_score = 8
-    elif quick_ratio >= 1.0:
-        quick_ratio_score = 6
-    elif quick_ratio >= 0.75:
-        quick_ratio_score = 3
-    else:
-        quick_ratio_score = 0
+    # Category scoring using the selected industry profile
+    current_ratio_score = _score_higher_is_better(
+        current_ratio,
+        scoring_profile["current_ratio"],
+    )
+    quick_ratio_score = _score_higher_is_better(
+        quick_ratio,
+        scoring_profile["quick_ratio"],
+    )
     liquidity_score = current_ratio_score + quick_ratio_score
 
-    if debt_to_equity <= 0.25:
-        debt_to_equity_score = 10
-    elif debt_to_equity <= 0.50:
-        debt_to_equity_score = 8
-    elif debt_to_equity <= 1.00:
-        debt_to_equity_score = 6
-    elif debt_to_equity <= 1.50:
-        debt_to_equity_score = 3
-    elif debt_to_equity <= 2.00:
-        debt_to_equity_score = 1
-    else:
-        debt_to_equity_score = 0
-
-    if debt_to_ebitda <= 1.0:
-        debt_to_ebitda_score = 15
-    elif debt_to_ebitda <= 2.0:
-        debt_to_ebitda_score = 12
-    elif debt_to_ebitda <= 3.0:
-        debt_to_ebitda_score = 9
-    elif debt_to_ebitda <= 4.0:
-        debt_to_ebitda_score = 6
-    elif debt_to_ebitda <= 5.0:
-        debt_to_ebitda_score = 3
-    else:
-        debt_to_ebitda_score = 0
+    debt_to_equity_score = _score_lower_is_better(
+        debt_to_equity,
+        scoring_profile["debt_to_equity"],
+    )
+    debt_to_ebitda_score = _score_lower_is_better(
+        debt_to_ebitda,
+        scoring_profile["debt_to_ebitda"],
+    )
     leverage_score = debt_to_equity_score + debt_to_ebitda_score
 
-    if ebitda_margin >= 0.30:
-        ebitda_margin_score = 8
-    elif ebitda_margin >= 0.20:
-        ebitda_margin_score = 6
-    elif ebitda_margin >= 0.10:
-        ebitda_margin_score = 4
-    elif ebitda_margin > 0:
-        ebitda_margin_score = 2
-    else:
-        ebitda_margin_score = 0
-
-    if net_margin >= 0.20:
-        net_margin_score = 8
-    elif net_margin >= 0.10:
-        net_margin_score = 6
-    elif net_margin >= 0.05:
-        net_margin_score = 4
-    elif net_margin > 0:
-        net_margin_score = 2
-    else:
-        net_margin_score = 0
+    ebitda_margin_score = _score_higher_is_better(
+        ebitda_margin,
+        scoring_profile["ebitda_margin"],
+        positive_fallback=2,
+    )
+    net_margin_score = _score_higher_is_better(
+        net_margin,
+        scoring_profile["net_margin"],
+        positive_fallback=2,
+    )
 
     if return_on_equity >= 0.20:
         return_on_equity_score = 4
@@ -725,27 +883,16 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         ebitda_margin_score + net_margin_score + return_on_equity_score
     )
 
-    if operating_cash_flow_margin >= 0.20:
-        operating_cash_flow_margin_score = 8
-    elif operating_cash_flow_margin >= 0.12:
-        operating_cash_flow_margin_score = 6
-    elif operating_cash_flow_margin >= 0.05:
-        operating_cash_flow_margin_score = 4
-    elif operating_cash_flow_margin > 0:
-        operating_cash_flow_margin_score = 2
-    else:
-        operating_cash_flow_margin_score = 0
-
-    if free_cash_flow_margin >= 0.15:
-        free_cash_flow_margin_score = 8
-    elif free_cash_flow_margin >= 0.08:
-        free_cash_flow_margin_score = 6
-    elif free_cash_flow_margin >= 0.03:
-        free_cash_flow_margin_score = 4
-    elif free_cash_flow_margin > 0:
-        free_cash_flow_margin_score = 2
-    else:
-        free_cash_flow_margin_score = 0
+    operating_cash_flow_margin_score = _score_higher_is_better(
+        operating_cash_flow_margin,
+        scoring_profile["operating_cash_flow_margin"],
+        positive_fallback=2,
+    )
+    free_cash_flow_margin_score = _score_higher_is_better(
+        free_cash_flow_margin,
+        scoring_profile["free_cash_flow_margin"],
+        positive_fallback=2,
+    )
 
     if cash_conversion_ratio >= 1.0:
         cash_conversion_score = 4
@@ -840,16 +987,144 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
 
     trend_adjustment = max(-5, min(5, trend_adjustment))
 
+    # Credit-focused weighted contributions. The raw category scoring
+    # remains useful for diagnostics, but the final base score gives
+    # more weight to leverage and cash generation and less weight to
+    # equity-market volatility.
+    weighted_liquidity_score = liquidity_score
+    weighted_leverage_score = round(leverage_score * 30 / 25)
+    weighted_profitability_score = profitability_score
+    weighted_cash_flow_score = round(cash_flow_score * 25 / 20)
+    weighted_market_risk_score = round(market_risk_score * 5 / 15)
+
     base_srinicredit_score = (
-        liquidity_score
-        + leverage_score
-        + profitability_score
-        + cash_flow_score
-        + market_risk_score
+        weighted_liquidity_score
+        + weighted_leverage_score
+        + weighted_profitability_score
+        + weighted_cash_flow_score
+        + weighted_market_risk_score
     )
-    srinicredit_score = max(
+    uncapped_srinicredit_score = max(
         0, min(100, base_srinicredit_score + trend_adjustment)
     )
+
+    # Warning signals and warning-based score cap
+    financial_warning_signals: list[str] = []
+    market_warning_signals: list[str] = []
+
+    if revenue_cagr is not None and revenue_cagr < 0:
+        financial_warning_signals.append(
+            "Revenue declined over the historical period analyzed."
+        )
+    if len(ebitda_series) >= 2 and ebitda_series[-1]["value"] < ebitda_series[0]["value"]:
+        financial_warning_signals.append(
+            "EBITDA declined over the historical period analyzed."
+        )
+    if len(net_income_series) >= 2 and net_income_series[-1]["value"] < net_income_series[0]["value"]:
+        financial_warning_signals.append(
+            "Net income declined over the historical period analyzed."
+        )
+    if (
+        len(operating_cash_flow_series) >= 2
+        and operating_cash_flow_series[-1]["value"]
+        < operating_cash_flow_series[0]["value"]
+    ):
+        financial_warning_signals.append(
+            "Operating cash flow declined over the historical period."
+        )
+    if (
+        len(free_cash_flow_series) >= 2
+        and free_cash_flow_series[-1]["value"] < free_cash_flow_series[0]["value"]
+    ):
+        financial_warning_signals.append(
+            "Free cash flow declined over the historical period."
+        )
+    if debt_change_percentage is not None and debt_change_percentage > 0.25:
+        financial_warning_signals.append(
+            "Total debt increased by more than 25% over the historical period analyzed."
+        )
+    if len(ebitda_margin_series) >= 2:
+        ebitda_margin_change = (
+            ebitda_margin_series[-1]["value"] - ebitda_margin_series[0]["value"]
+        )
+        if ebitda_margin_change < -0.05:
+            financial_warning_signals.append(
+                "The EBITDA margin contracted by more than five percentage points."
+            )
+    if len(net_margin_series) >= 2:
+        net_margin_change = (
+            net_margin_series[-1]["value"] - net_margin_series[0]["value"]
+        )
+        if net_margin_change < -0.05:
+            financial_warning_signals.append(
+                "The net margin contracted by more than five percentage points."
+            )
+    if shareholders_equity <= 0:
+        financial_warning_signals.append(
+            "Shareholders' equity is zero or negative."
+        )
+    if ebitda <= 0:
+        financial_warning_signals.append(
+            "EBITDA is zero or negative, indicating weak operating earnings."
+        )
+    if current_ratio < scoring_profile["liquidity_warning_threshold"]:
+        financial_warning_signals.append(
+            "Short-term liquidity is below the threshold used by the selected industry profile."
+        )
+    if free_cash_flow <= 0:
+        financial_warning_signals.append("Free cash flow is zero or negative.")
+    if debt_to_ebitda > scoring_profile["debt_warning_threshold"]:
+        financial_warning_signals.append("Debt is high relative to EBITDA.")
+    if net_margin <= 0:
+        financial_warning_signals.append(
+            "The company reported a zero or negative net-profit margin."
+        )
+    if annualized_volatility > 0.50:
+        market_warning_signals.append(
+            "The stock has experienced elevated historical volatility."
+        )
+    if max_drawdown < -0.50:
+        market_warning_signals.append(
+            "The stock has experienced a historical drawdown greater than 50%."
+        )
+
+    financial_warning_count = len(financial_warning_signals)
+    market_warning_count = len(market_warning_signals)
+
+    critical_financial_warning = any(
+        condition
+        for condition in (
+            shareholders_equity <= 0,
+            ebitda <= 0,
+            free_cash_flow <= 0,
+            net_margin <= 0,
+            debt_to_ebitda > scoring_profile["debt_warning_threshold"] + 1.0,
+        )
+    )
+
+    if critical_financial_warning:
+        financial_score_cap = 59
+    elif financial_warning_count >= 5:
+        financial_score_cap = 69
+    elif financial_warning_count >= 3:
+        financial_score_cap = 79
+    elif financial_warning_count == 2:
+        financial_score_cap = 92
+    elif financial_warning_count == 1:
+        financial_score_cap = 96
+    else:
+        financial_score_cap = 100
+
+    if market_warning_count >= 2:
+        market_score_cap = 97
+    elif market_warning_count == 1:
+        market_score_cap = 99
+    else:
+        market_score_cap = 100
+
+    score_cap = min(financial_score_cap, market_score_cap)
+    srinicredit_score = min(uncapped_srinicredit_score, score_cap)
+    score_cap_applied = srinicredit_score < uncapped_srinicredit_score
 
     if srinicredit_score >= 90:
         credit_tier = "Exceptional"
@@ -873,69 +1148,9 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     else:
         lending_recommendation = "High-risk lending candidate"
 
-    # Warning signals
-    warning_signals: list[str] = []
-    if revenue_cagr is not None and revenue_cagr < 0:
-        warning_signals.append("Revenue declined over the historical period analyzed.")
-    if len(ebitda_series) >= 2 and ebitda_series[-1]["value"] < ebitda_series[0]["value"]:
-        warning_signals.append("EBITDA declined over the historical period analyzed.")
-    if len(net_income_series) >= 2 and net_income_series[-1]["value"] < net_income_series[0]["value"]:
-        warning_signals.append("Net income declined over the historical period analyzed.")
-    if (
-        len(operating_cash_flow_series) >= 2
-        and operating_cash_flow_series[-1]["value"]
-        < operating_cash_flow_series[0]["value"]
-    ):
-        warning_signals.append("Operating cash flow declined over the historical period.")
-    if (
-        len(free_cash_flow_series) >= 2
-        and free_cash_flow_series[-1]["value"] < free_cash_flow_series[0]["value"]
-    ):
-        warning_signals.append("Free cash flow declined over the historical period.")
-    if debt_change_percentage is not None and debt_change_percentage > 0.25:
-        warning_signals.append(
-            "Total debt increased by more than 25% over the historical period analyzed."
-        )
-    if len(ebitda_margin_series) >= 2:
-        ebitda_margin_change = (
-            ebitda_margin_series[-1]["value"] - ebitda_margin_series[0]["value"]
-        )
-        if ebitda_margin_change < -0.05:
-            warning_signals.append(
-                "The EBITDA margin contracted by more than five percentage points."
-            )
-    if len(net_margin_series) >= 2:
-        net_margin_change = (
-            net_margin_series[-1]["value"] - net_margin_series[0]["value"]
-        )
-        if net_margin_change < -0.05:
-            warning_signals.append(
-                "The net margin contracted by more than five percentage points."
-            )
-    if shareholders_equity <= 0:
-        warning_signals.append("Shareholders' equity is zero or negative.")
-    if ebitda <= 0:
-        warning_signals.append(
-            "EBITDA is zero or negative, indicating weak operating earnings."
-        )
-    if current_ratio < 1.0:
-        warning_signals.append("Current liabilities exceed current assets.")
-    if free_cash_flow <= 0:
-        warning_signals.append("Free cash flow is zero or negative.")
-    if debt_to_ebitda > 4.0:
-        warning_signals.append("Debt is high relative to EBITDA.")
-    if net_margin <= 0:
-        warning_signals.append(
-            "The company reported a zero or negative net-profit margin."
-        )
-    if annualized_volatility > 0.50:
-        warning_signals.append(
-            "The stock has experienced elevated historical volatility."
-        )
-    if max_drawdown < -0.50:
-        warning_signals.append(
-            "The stock has experienced a historical drawdown greater than 50%."
-        )
+    warning_signals = financial_warning_signals + market_warning_signals
+    if model_scope_warning is not None:
+        warning_signals.append(model_scope_warning)
 
     warning_signals_text = (
         "\n".join(f"- {warning}" for warning in warning_signals)
@@ -947,9 +1162,10 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     analyst_summary = (
         f"{company_name} ({ticker}) received a final Srini Credit score of "
         f"{srinicredit_score}/100, placing the company in the {credit_tier} "
-        f"tier. The score includes a base score of "
-        f"{base_srinicredit_score}/100 and a historical trend adjustment of "
-        f"{trend_adjustment:+d}. Based on the model's evaluation of liquidity, "
+        f"tier. The {scoring_profile_name} scoring profile was applied. The "
+        f"score includes a base score of {base_srinicredit_score}/100 and a "
+        f"historical trend adjustment of {trend_adjustment:+d}. Based on the "
+        f"model's evaluation of liquidity, "
         f"leverage, profitability, cash flow, market risk, and historical "
         f"trends, the company is classified as a "
         f"{lending_recommendation.lower()}."
@@ -960,6 +1176,13 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"{sector} sector. The company is headquartered in {country} and "
         f"trades on the {exchange_name}. Its reported market capitalization "
         f"is {market_cap_text}."
+    )
+
+    scoring_profile_analysis = (
+        f"Srini Credit applied the {scoring_profile_name} profile. "
+        f"{scoring_profile_description} These thresholds are experimental "
+        f"internal calibration choices and should be validated against a "
+        f"larger sample and external credit outcomes."
     )
 
     if current_ratio >= 2.0 and quick_ratio >= 1.5:
@@ -1014,8 +1237,9 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"Total debt is {total_debt_text}, compared with {equity_text} of "
         f"shareholders' equity. Its debt-to-equity ratio is "
         f"{debt_to_equity_text}, while its debt-to-EBITDA ratio is "
-        f"{debt_to_ebitda_text}. {leverage_conclusion} The company earned "
-        f"{leverage_score}/25 points in the leverage category."
+        f"{debt_to_ebitda_text}. {leverage_conclusion} Its raw leverage "
+        f"score was {leverage_score}/25, contributing "
+        f"{weighted_leverage_score}/30 points to the weighted base score."
     )
 
     if ebitda_margin >= 0.20 and net_margin >= 0.10:
@@ -1072,7 +1296,8 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"{operating_cash_flow_margin:.2%}, and its free cash-flow margin was "
         f"{free_cash_flow_margin:.2%}. The cash-conversion ratio was "
         f"{cash_conversion_ratio:.2f}. {cash_flow_conclusion} The company "
-        f"earned {cash_flow_score}/20 points in the cash-flow category."
+        f"earned a raw cash-flow score of {cash_flow_score}/20, contributing "
+        f"{weighted_cash_flow_score}/25 points to the weighted base score."
     )
 
     if beta is None:
@@ -1106,7 +1331,9 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"drawdown was {max_drawdown:.2%}. {market_risk_conclusion} Market-price "
         f"risk does not directly equal default risk, but it may reflect investor "
         f"uncertainty and sensitivity to economic or industry changes. The "
-        f"company earned {market_risk_score}/15 points in the market-risk category."
+        f"company earned a raw market-risk score of {market_risk_score}/15, "
+        f"contributing {weighted_market_risk_score}/5 points to the weighted "
+        f"base score."
     )
 
     strengths: list[str] = []
@@ -1183,13 +1410,16 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         )
 
     score_breakdown_text = (
-        f"Liquidity: {liquidity_score}/20\n"
-        f"Leverage: {leverage_score}/25\n"
-        f"Profitability: {profitability_score}/20\n"
-        f"Cash Flow: {cash_flow_score}/20\n"
-        f"Market Risk: {market_risk_score}/15\n"
+        f"Scoring Profile: {scoring_profile_name}\n"
+        f"Liquidity Contribution: {weighted_liquidity_score}/20\n"
+        f"Leverage Contribution: {weighted_leverage_score}/30\n"
+        f"Profitability Contribution: {weighted_profitability_score}/20\n"
+        f"Cash-Flow Contribution: {weighted_cash_flow_score}/25\n"
+        f"Market-Risk Contribution: {weighted_market_risk_score}/5\n"
         f"Base Srini Credit Score: {base_srinicredit_score}/100\n"
         f"Historical Trend Adjustment: {trend_adjustment:+d}\n"
+        f"Uncapped Score: {uncapped_srinicredit_score}/100\n"
+        f"Warning-Based Score Cap: {score_cap}/100\n"
         f"Final Srini Credit Score: {srinicredit_score}/100"
     )
 
@@ -1204,6 +1434,7 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"EXECUTIVE SUMMARY\n{analyst_summary}\n\n"
         f"SCORE BREAKDOWN\n{score_breakdown_text}\n\n"
         f"COMPANY OVERVIEW\n{company_overview}\n\n"
+        f"SCORING PROFILE\n{scoring_profile_analysis}\n\n"
         f"LIQUIDITY ANALYSIS\n{liquidity_analysis}\n\n"
         f"LEVERAGE ANALYSIS\n{leverage_analysis}\n\n"
         f"PROFITABILITY ANALYSIS\n{profitability_analysis}\n\n"
@@ -1231,6 +1462,7 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"Company Name: {company_name}\n"
         f"Sector: {sector}\n"
         f"Industry: {industry}\n"
+        f"Scoring Profile: {scoring_profile_name}\n"
         f"Country: {country}\n"
         f"Stock Price: {stock_price_text}\n"
         f"Market Cap: {market_cap_text}\n"
@@ -1290,6 +1522,14 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     )
 
     category_scores = [
+        ("Liquidity", weighted_liquidity_score, 20),
+        ("Leverage", weighted_leverage_score, 30),
+        ("Profitability", weighted_profitability_score, 20),
+        ("Cash Flow", weighted_cash_flow_score, 25),
+        ("Market Risk", weighted_market_risk_score, 5),
+    ]
+
+    raw_category_scores = [
         ("Liquidity", liquidity_score, 20),
         ("Leverage", leverage_score, 25),
         ("Profitability", profitability_score, 20),
@@ -1300,6 +1540,7 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     memo_sections = [
         ("Executive Summary", analyst_summary),
         ("Company Overview", company_overview),
+        ("Scoring Profile", scoring_profile_analysis),
         ("Liquidity Analysis", liquidity_analysis),
         ("Leverage Analysis", leverage_analysis),
         ("Profitability Analysis", profitability_analysis),
@@ -1315,12 +1556,25 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     return {
         "ticker": ticker,
         "company_name": company_name,
+        "sector": sector,
+        "industry": industry,
+        "country": country,
+        "scoring_profile_key": scoring_profile_key,
+        "scoring_profile_name": scoring_profile_name,
+        "scoring_profile_description": scoring_profile_description,
+        "model_scope_warning": model_scope_warning,
         "credit_tier": credit_tier,
         "lending_recommendation": lending_recommendation,
         "srinicredit_score": srinicredit_score,
+        "uncapped_srinicredit_score": uncapped_srinicredit_score,
+        "score_cap": score_cap,
+        "score_cap_applied": score_cap_applied,
+        "financial_warning_count": financial_warning_count,
+        "market_warning_count": market_warning_count,
         "base_srinicredit_score": base_srinicredit_score,
         "trend_adjustment": trend_adjustment,
         "category_scores": category_scores,
+        "raw_category_scores": raw_category_scores,
         "score_breakdown_text": score_breakdown_text,
         "memo_sections": memo_sections,
         "full_memo": full_memo,
@@ -1528,6 +1782,11 @@ def create_credit_pdf(
                 "Historical Trend Adjustment",
                 f"{result['trend_adjustment']:+d}",
                 "+/- 5",
+            ],
+            [
+                "Warning-Based Score Cap",
+                str(result["score_cap"]),
+                "100",
             ],
             [
                 "Final Srini Credit Score",

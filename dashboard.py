@@ -7,7 +7,6 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 import streamlit as st
-API_KEY = st.secrets["API_KEY"]
 
 from credit_engine import (
     FinancialDataError,
@@ -22,6 +21,17 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
 )
+
+
+try:
+    API_KEY = st.secrets["API_KEY"]
+except KeyError:
+    st.error(
+        "The FMP API key is missing. Add API_KEY to "
+        ".streamlit/secrets.toml locally or to the app's Secrets settings "
+        "on Streamlit Community Cloud."
+    )
+    st.stop()
 
 
 @st.cache_data(show_spinner=False, ttl=900)
@@ -60,6 +70,13 @@ def display_result(result: dict) -> None:
 
     st.divider()
     st.subheader(f"{company_name} ({ticker})")
+    st.caption(
+        f"Scoring profile: {result['scoring_profile_name']} | "
+        f"Warning-based score cap: {result['score_cap']}/100"
+    )
+
+    if result["model_scope_warning"]:
+        st.info(result["model_scope_warning"])
 
     score_column, tier_column, trend_column, recommendation_column = st.columns(
         [1, 1, 1, 2]
@@ -131,17 +148,31 @@ def display_result(result: dict) -> None:
             st.dataframe(
                 category_frame,
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
+            )
+
+        if result["score_cap_applied"]:
+            st.caption(
+                f"The uncapped score was "
+                f"{result['uncapped_srinicredit_score']}/100 and was "
+                f"limited to {result['score_cap']}/100 by the model's "
+                f"warning-based cap."
             )
 
         st.markdown("#### Executive Summary")
         st.write(get_memo_section(result, "Executive Summary"))
 
-        if result["warning_signals"]:
+        display_warnings = [
+            warning
+            for warning in result["warning_signals"]
+            if warning != result["model_scope_warning"]
+        ]
+
+        if display_warnings:
             st.markdown("#### Warning Signals")
-            for warning in result["warning_signals"]:
+            for warning in display_warnings:
                 st.warning(warning)
-        else:
+        elif not result["model_scope_warning"]:
             st.success("No major warning signals were detected by the model.")
 
     with market_tab:
@@ -214,7 +245,7 @@ def display_result(result: dict) -> None:
             data=text_bytes,
             file_name=f"{ticker}_srini_credit_report.txt",
             mime="text/plain",
-            use_container_width=True,
+            width="stretch",
         )
 
     with pdf_column:
@@ -224,7 +255,7 @@ def display_result(result: dict) -> None:
             file_name=f"{ticker}_srini_credit_report.pdf",
             mime="application/pdf",
             disabled=pdf_bytes is None,
-            use_container_width=True,
+            width="stretch",
         )
 
 
@@ -251,7 +282,7 @@ with st.form("ticker_form"):
 
     analyze_button = st.form_submit_button(
         "Analyze Company",
-        use_container_width=True,
+        width="stretch",
     )
 
 if analyze_button:

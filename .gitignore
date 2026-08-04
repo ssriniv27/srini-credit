@@ -2,18 +2,20 @@
 config.py
 .streamlit/secrets.toml
 
-# Python cache files
+# Python cache and virtual environments
 __pycache__/
 *.pyc
+.venv/
+venv/
 
-# PyCharm settings
+# IDE settings
 .idea/
 
-# Generated reports
+# Generated reports and validation output
 reports/
 *_srini_credit_memo_*.txt
 *_srini_credit_memo_*.pdf
+model_validation_results.csv
 
-# Virtual environment
-.venv/
-venv/
+# Temporary files
+temp.py
