@@ -6,7 +6,7 @@ Srini Credit is a Python and Streamlit corporate credit-screening application. I
 
 Try Srini Credit Here: 
 
-[Open the Srini Credit Dashboard]([PASTE-YOUR-STREAMLIT-URL-HERE](https://srinicredit.streamlit.app/))
+[Open the Srini Credit Dashboard](https://srinicredit.streamlit.app/)
 
 ## Disclaimer
 
