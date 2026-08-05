@@ -2,7 +2,7 @@
 
 Srini Credit is a Python and Streamlit corporate credit-screening application. It evaluates a public company's liquidity, leverage, profitability, cash flow, market risk, and historical financial trends, then produces a proprietary score out of 100, a credit tier, warning signals, and downloadable TXT/PDF analyst reports.
 
-## Live Application
+## Live Application 
 
 Try Srini Credit Here: 
 
@@ -10,7 +10,7 @@ Try Srini Credit Here:
 
 ## Disclaimer
 
-If none of the Tickers work, this means the API has reached its daily free limit. Please wait atleast 24 hours before using again. 
+If none of the Tickers work, this means the API has reached its daily free limit. Please wait atleast 24 hours before using again.
 
 ## Current scoring weights
 
@@ -34,7 +34,7 @@ The engine currently selects one of these provisional profiles from the FMP sect
 - Telecommunications
 - Integrated Energy
 
-Each profile changes selected liquidity, leverage, profitability, and cash-flow thresholds rather than adding an arbitrary sector bonus. A warning-based score cap also limits unusually high scores when material financial or market warnings are present. Automakers and financial institutions receive a specialized-model warning because consolidated corporate ratios can be misleading for those business models.
+Each profile changes selected liquidity, leverage, profitability, and cash-flow thresholds rather than adding an arbitrary sector bonus. Financial warnings are classified as critical, major, or informational. Only critical and major financial-credit warnings can cap the score; market warnings remain informational because market risk is already included in the five-point market-risk category. The leverage analysis also uses net debt-to-EBITDA, interest coverage, and operating cash flow-to-debt. Automakers and financial institutions receive a specialized-model warning because consolidated corporate ratios can be misleading for those business models.
 
 These profiles are experimental calibration choices and should be tested against a larger sample and external credit outcomes before being treated as predictive.
 

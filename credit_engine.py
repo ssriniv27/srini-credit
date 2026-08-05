@@ -503,6 +503,70 @@ def _get_model_scope_warning(sector: str, industry: str) -> str | None:
 
     return None
 
+
+def _has_sustained_decline(
+    series: list[dict[str, Any]],
+    minimum_total_decline: float = 0.10,
+) -> bool:
+    """Return True after two consecutive, material annual declines."""
+
+    if len(series) < 3:
+        return False
+
+    recent_values = [record["value"] for record in series[-3:]]
+    consecutive_declines = (
+        recent_values[0] > recent_values[1] > recent_values[2]
+    )
+    baseline = abs(recent_values[0])
+
+    if not consecutive_declines:
+        return False
+    if baseline == 0:
+        return recent_values[-1] < recent_values[0]
+
+    total_decline = (recent_values[0] - recent_values[-1]) / baseline
+    return total_decline >= minimum_total_decline
+
+
+def _has_sustained_increase(
+    series: list[dict[str, Any]],
+    minimum_total_increase: float = 0.25,
+) -> bool:
+    """Return True after two consecutive, material annual increases."""
+
+    if len(series) < 3:
+        return False
+
+    recent_values = [record["value"] for record in series[-3:]]
+    consecutive_increases = (
+        recent_values[0] < recent_values[1] < recent_values[2]
+    )
+    baseline = abs(recent_values[0])
+
+    if not consecutive_increases:
+        return False
+    if baseline == 0:
+        return recent_values[-1] > recent_values[0]
+
+    total_increase = (recent_values[-1] - recent_values[0]) / baseline
+    return total_increase >= minimum_total_increase
+
+
+def _has_sustained_absolute_decline(
+    series: list[dict[str, Any]],
+    minimum_drop: float,
+) -> bool:
+    """Return True when a ratio falls twice in a row by a material amount."""
+
+    if len(series) < 3:
+        return False
+
+    recent_values = [record["value"] for record in series[-3:]]
+    return (
+        recent_values[0] > recent_values[1] > recent_values[2]
+        and recent_values[0] - recent_values[-1] >= minimum_drop
+    )
+
 def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     """Run the complete Srini Credit analysis and return all report data."""
 
@@ -629,7 +693,10 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     revenue = income_statement.get("revenue")
     net_income = income_statement.get("netIncome")
     ebitda = income_statement.get("ebitda")
+    operating_income = income_statement.get("operatingIncome")
+    interest_expense = income_statement.get("interestExpense")
     total_debt = balance_sheet.get("totalDebt")
+    reported_net_debt = balance_sheet.get("netDebt")
     shareholders_equity = balance_sheet.get("totalStockholdersEquity")
     operating_cash_flow = cash_flow_statement.get("operatingCashFlow")
     free_cash_flow = cash_flow_statement.get("freeCashFlow")
@@ -649,6 +716,12 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
                 f"Required value '{value_name}' is missing or invalid."
             )
 
+    if is_valid_financial_number(reported_net_debt):
+        net_debt = float(reported_net_debt)
+    else:
+        net_debt = float(total_debt) - float(cash_and_investments)
+    net_debt_text = format_currency(net_debt)
+
     if shareholders_equity <= 0:
         debt_to_equity = float("inf")
         debt_to_equity_text = (
@@ -660,12 +733,46 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
 
     if ebitda <= 0:
         debt_to_ebitda = float("inf")
+        net_debt_to_ebitda = float("inf")
         debt_to_ebitda_text = (
             "Not meaningful because EBITDA is zero or negative"
         )
+        net_debt_to_ebitda_text = debt_to_ebitda_text
     else:
         debt_to_ebitda = total_debt / ebitda
+        net_debt_to_ebitda = net_debt / ebitda
         debt_to_ebitda_text = f"{debt_to_ebitda:.2f}"
+        net_debt_to_ebitda_text = f"{net_debt_to_ebitda:.2f}"
+
+    if (
+        is_valid_financial_number(operating_income)
+        and is_valid_financial_number(interest_expense)
+    ):
+        interest_cost = abs(float(interest_expense))
+        if interest_cost == 0:
+            interest_coverage = (
+                float("inf") if operating_income > 0 else 0.0
+            )
+        else:
+            interest_coverage = float(operating_income) / interest_cost
+    else:
+        interest_coverage = None
+
+    if interest_coverage is None:
+        interest_coverage_text = "Unavailable"
+    elif math.isinf(interest_coverage):
+        interest_coverage_text = "No material interest expense"
+    else:
+        interest_coverage_text = f"{interest_coverage:.2f}x"
+
+    if total_debt <= 0:
+        operating_cash_flow_to_debt = float("inf")
+        operating_cash_flow_to_debt_text = "No debt"
+    else:
+        operating_cash_flow_to_debt = operating_cash_flow / total_debt
+        operating_cash_flow_to_debt_text = (
+            f"{operating_cash_flow_to_debt:.2%}"
+        )
 
     ebitda_margin = safe_divide(ebitda, revenue, "EBITDA margin")
     net_margin = safe_divide(net_income, revenue, "net margin")
@@ -848,15 +955,44 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     )
     liquidity_score = current_ratio_score + quick_ratio_score
 
-    debt_to_equity_score = _score_lower_is_better(
+    debt_to_equity_raw_score = _score_lower_is_better(
         debt_to_equity,
         scoring_profile["debt_to_equity"],
     )
-    debt_to_ebitda_score = _score_lower_is_better(
-        debt_to_ebitda,
+    net_debt_to_ebitda_raw_score = _score_lower_is_better(
+        net_debt_to_ebitda,
         scoring_profile["debt_to_ebitda"],
     )
-    leverage_score = debt_to_equity_score + debt_to_ebitda_score
+
+    debt_to_equity_score = round(debt_to_equity_raw_score * 8 / 10)
+    net_debt_to_ebitda_score = round(
+        net_debt_to_ebitda_raw_score * 12 / 15
+    )
+
+    if interest_coverage is None:
+        gross_debt_fallback_score = _score_lower_is_better(
+            debt_to_ebitda,
+            scoring_profile["debt_to_ebitda"],
+        )
+        interest_coverage_score = round(
+            gross_debt_fallback_score * 5 / 15
+        )
+        interest_coverage_scoring_note = (
+            "Interest coverage was unavailable, so gross debt-to-EBITDA "
+            "was used as a fallback for five leverage points."
+        )
+    else:
+        interest_coverage_score = _score_higher_is_better(
+            interest_coverage,
+            ((8.0, 5), (5.0, 4), (3.0, 3), (2.0, 2), (1.5, 1)),
+        )
+        interest_coverage_scoring_note = None
+
+    leverage_score = (
+        debt_to_equity_score
+        + net_debt_to_ebitda_score
+        + interest_coverage_score
+    )
 
     ebitda_margin_score = _score_higher_is_better(
         ebitda_margin,
@@ -1008,77 +1144,102 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         0, min(100, base_srinicredit_score + trend_adjustment)
     )
 
-    # Warning signals and warning-based score cap
-    financial_warning_signals: list[str] = []
+    # Warning signals classified by severity. Only critical and major
+    # financial-credit warnings can cap the score. Market warnings are
+    # informational because market risk is already represented in the model.
+    critical_warning_signals: list[str] = []
+    major_warning_signals: list[str] = []
+    informational_warning_signals: list[str] = []
     market_warning_signals: list[str] = []
 
-    if revenue_cagr is not None and revenue_cagr < 0:
-        financial_warning_signals.append(
-            "Revenue declined over the historical period analyzed."
+    if _has_sustained_decline(revenue_series, 0.05):
+        major_warning_signals.append(
+            "Revenue declined for two consecutive annual periods by a material amount."
         )
-    if len(ebitda_series) >= 2 and ebitda_series[-1]["value"] < ebitda_series[0]["value"]:
-        financial_warning_signals.append(
-            "EBITDA declined over the historical period analyzed."
+    if _has_sustained_decline(ebitda_series, 0.10):
+        major_warning_signals.append(
+            "EBITDA declined for two consecutive annual periods by a material amount."
         )
-    if len(net_income_series) >= 2 and net_income_series[-1]["value"] < net_income_series[0]["value"]:
-        financial_warning_signals.append(
-            "Net income declined over the historical period analyzed."
+    if _has_sustained_decline(net_income_series, 0.10):
+        major_warning_signals.append(
+            "Net income declined for two consecutive annual periods by a material amount."
         )
-    if (
-        len(operating_cash_flow_series) >= 2
-        and operating_cash_flow_series[-1]["value"]
-        < operating_cash_flow_series[0]["value"]
-    ):
-        financial_warning_signals.append(
-            "Operating cash flow declined over the historical period."
+    if _has_sustained_decline(operating_cash_flow_series, 0.10):
+        major_warning_signals.append(
+            "Operating cash flow declined for two consecutive annual periods."
         )
-    if (
-        len(free_cash_flow_series) >= 2
-        and free_cash_flow_series[-1]["value"] < free_cash_flow_series[0]["value"]
-    ):
-        financial_warning_signals.append(
-            "Free cash flow declined over the historical period."
+    if _has_sustained_decline(free_cash_flow_series, 0.10):
+        major_warning_signals.append(
+            "Free cash flow declined for two consecutive annual periods."
         )
-    if debt_change_percentage is not None and debt_change_percentage > 0.25:
-        financial_warning_signals.append(
-            "Total debt increased by more than 25% over the historical period analyzed."
+    if _has_sustained_increase(total_debt_series, 0.25):
+        major_warning_signals.append(
+            "Total debt increased for two consecutive annual periods by more than 25%."
         )
-    if len(ebitda_margin_series) >= 2:
-        ebitda_margin_change = (
-            ebitda_margin_series[-1]["value"] - ebitda_margin_series[0]["value"]
+    if _has_sustained_absolute_decline(ebitda_margin_series, 0.05):
+        major_warning_signals.append(
+            "The EBITDA margin contracted in two consecutive annual periods by at least five percentage points."
         )
-        if ebitda_margin_change < -0.05:
-            financial_warning_signals.append(
-                "The EBITDA margin contracted by more than five percentage points."
-            )
-    if len(net_margin_series) >= 2:
-        net_margin_change = (
-            net_margin_series[-1]["value"] - net_margin_series[0]["value"]
+    if _has_sustained_absolute_decline(net_margin_series, 0.05):
+        major_warning_signals.append(
+            "The net margin contracted in two consecutive annual periods by at least five percentage points."
         )
-        if net_margin_change < -0.05:
-            financial_warning_signals.append(
-                "The net margin contracted by more than five percentage points."
-            )
+
     if shareholders_equity <= 0:
-        financial_warning_signals.append(
+        critical_warning_signals.append(
             "Shareholders' equity is zero or negative."
         )
     if ebitda <= 0:
-        financial_warning_signals.append(
+        critical_warning_signals.append(
             "EBITDA is zero or negative, indicating weak operating earnings."
         )
-    if current_ratio < scoring_profile["liquidity_warning_threshold"]:
-        financial_warning_signals.append(
-            "Short-term liquidity is below the threshold used by the selected industry profile."
-        )
     if free_cash_flow <= 0:
-        financial_warning_signals.append("Free cash flow is zero or negative.")
-    if debt_to_ebitda > scoring_profile["debt_warning_threshold"]:
-        financial_warning_signals.append("Debt is high relative to EBITDA.")
+        critical_warning_signals.append(
+            "Free cash flow is zero or negative."
+        )
     if net_margin <= 0:
-        financial_warning_signals.append(
+        critical_warning_signals.append(
             "The company reported a zero or negative net-profit margin."
         )
+
+    severe_net_debt_threshold = (
+        scoring_profile["debt_warning_threshold"] + 1.5
+    )
+    if net_debt_to_ebitda > severe_net_debt_threshold:
+        critical_warning_signals.append(
+            "Net debt is extremely high relative to EBITDA."
+        )
+    elif net_debt_to_ebitda > scoring_profile["debt_warning_threshold"]:
+        major_warning_signals.append(
+            "Net debt is high relative to EBITDA."
+        )
+
+    if interest_coverage is None:
+        informational_warning_signals.append(
+            "Interest coverage could not be calculated from the available income-statement fields."
+        )
+    elif interest_coverage < 1.0:
+        critical_warning_signals.append(
+            "Operating income does not fully cover reported interest expense."
+        )
+    elif interest_coverage < 2.0:
+        major_warning_signals.append(
+            "Interest coverage is below 2.0 times."
+        )
+
+    if current_ratio < scoring_profile["liquidity_warning_threshold"]:
+        major_warning_signals.append(
+            "Short-term liquidity is below the threshold used by the selected industry profile."
+        )
+    if (
+        total_debt > 0
+        and operating_cash_flow_to_debt < 0.15
+        and operating_cash_flow > 0
+    ):
+        major_warning_signals.append(
+            "Operating cash flow is less than 15% of total debt."
+        )
+
     if annualized_volatility > 0.50:
         market_warning_signals.append(
             "The stock has experienced elevated historical volatility."
@@ -1087,42 +1248,34 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         market_warning_signals.append(
             "The stock has experienced a historical drawdown greater than 50%."
         )
+    informational_warning_signals.extend(market_warning_signals)
 
+    if model_scope_warning is not None:
+        informational_warning_signals.append(model_scope_warning)
+
+    critical_warning_count = len(critical_warning_signals)
+    major_warning_count = len(major_warning_signals)
+    informational_warning_count = len(informational_warning_signals)
+    financial_warning_signals = (
+        critical_warning_signals + major_warning_signals
+    )
     financial_warning_count = len(financial_warning_signals)
     market_warning_count = len(market_warning_signals)
 
-    critical_financial_warning = any(
-        condition
-        for condition in (
-            shareholders_equity <= 0,
-            ebitda <= 0,
-            free_cash_flow <= 0,
-            net_margin <= 0,
-            debt_to_ebitda > scoring_profile["debt_warning_threshold"] + 1.0,
-        )
-    )
-
-    if critical_financial_warning:
+    if critical_warning_count > 0:
         financial_score_cap = 59
-    elif financial_warning_count >= 5:
+    elif major_warning_count >= 5:
         financial_score_cap = 69
-    elif financial_warning_count >= 3:
+    elif major_warning_count >= 3:
         financial_score_cap = 79
-    elif financial_warning_count == 2:
-        financial_score_cap = 92
-    elif financial_warning_count == 1:
-        financial_score_cap = 96
+    elif major_warning_count == 2:
+        financial_score_cap = 89
+    elif major_warning_count == 1:
+        financial_score_cap = 94
     else:
         financial_score_cap = 100
 
-    if market_warning_count >= 2:
-        market_score_cap = 97
-    elif market_warning_count == 1:
-        market_score_cap = 99
-    else:
-        market_score_cap = 100
-
-    score_cap = min(financial_score_cap, market_score_cap)
+    score_cap = financial_score_cap
     srinicredit_score = min(uncapped_srinicredit_score, score_cap)
     score_cap_applied = srinicredit_score < uncapped_srinicredit_score
 
@@ -1148,14 +1301,39 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     else:
         lending_recommendation = "High-risk lending candidate"
 
-    warning_signals = financial_warning_signals + market_warning_signals
-    if model_scope_warning is not None:
-        warning_signals.append(model_scope_warning)
+    warning_signals = (
+        critical_warning_signals
+        + major_warning_signals
+        + informational_warning_signals
+    )
+
+    warning_sections: list[str] = []
+    if critical_warning_signals:
+        warning_sections.append(
+            "CRITICAL\n"
+            + "\n".join(
+                f"- {warning}" for warning in critical_warning_signals
+            )
+        )
+    if major_warning_signals:
+        warning_sections.append(
+            "MAJOR\n"
+            + "\n".join(
+                f"- {warning}" for warning in major_warning_signals
+            )
+        )
+    if informational_warning_signals:
+        warning_sections.append(
+            "INFORMATIONAL\n"
+            + "\n".join(
+                f"- {warning}" for warning in informational_warning_signals
+            )
+        )
 
     warning_signals_text = (
-        "\n".join(f"- {warning}" for warning in warning_signals)
-        if warning_signals
-        else "- No major warning signals were detected by the model."
+        "\n\n".join(warning_sections)
+        if warning_sections
+        else "- No warning signals were detected by the model."
     )
 
     # Memo analysis sections
@@ -1213,33 +1391,45 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"points in the liquidity category."
     )
 
-    if debt_to_equity <= 0.50 and debt_to_ebitda <= 2.0:
+    if (
+        debt_to_equity <= 0.50
+        and net_debt_to_ebitda <= 2.0
+        and (interest_coverage is None or interest_coverage >= 5.0)
+    ):
         leverage_description = "low"
         leverage_conclusion = (
-            "This indicates limited reliance on debt financing and a substantial "
-            "capacity to support existing debt obligations."
+            "This indicates limited net leverage and strong capacity to service "
+            "existing debt obligations."
         )
-    elif debt_to_equity <= 1.00 and debt_to_ebitda <= 3.5:
+    elif (
+        debt_to_equity <= 1.00
+        and net_debt_to_ebitda <= 3.5
+        and (interest_coverage is None or interest_coverage >= 2.0)
+    ):
         leverage_description = "moderate"
         leverage_conclusion = (
-            "The company's debt burden appears manageable, but leverage should "
-            "continue to be monitored."
+            "The company's debt burden appears manageable, but leverage and "
+            "debt-service capacity should continue to be monitored."
         )
     else:
         leverage_description = "elevated"
         leverage_conclusion = (
-            "The company's debt burden may reduce financial flexibility and "
-            "increase repayment risk."
+            "The company's debt burden or debt-service capacity may reduce "
+            "financial flexibility and increase repayment risk."
         )
 
     leverage_analysis = (
         f"The company has a {leverage_description} level of financial leverage. "
-        f"Total debt is {total_debt_text}, compared with {equity_text} of "
-        f"shareholders' equity. Its debt-to-equity ratio is "
-        f"{debt_to_equity_text}, while its debt-to-EBITDA ratio is "
-        f"{debt_to_ebitda_text}. {leverage_conclusion} Its raw leverage "
-        f"score was {leverage_score}/25, contributing "
-        f"{weighted_leverage_score}/30 points to the weighted base score."
+        f"Total debt is {total_debt_text}, net debt is {net_debt_text}, and "
+        f"shareholders' equity is {equity_text}. Its debt-to-equity ratio is "
+        f"{debt_to_equity_text}, gross debt-to-EBITDA is "
+        f"{debt_to_ebitda_text}, and net debt-to-EBITDA is "
+        f"{net_debt_to_ebitda_text}. Interest coverage is "
+        f"{interest_coverage_text}, while operating cash flow equals "
+        f"{operating_cash_flow_to_debt_text} of total debt. "
+        f"{leverage_conclusion} Its raw leverage score was "
+        f"{leverage_score}/25, contributing {weighted_leverage_score}/30 "
+        f"points to the weighted base score."
     )
 
     if ebitda_margin >= 0.20 and net_margin >= 0.10:
@@ -1353,8 +1543,10 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         risks.append("elevated stock-market risk")
     if current_ratio < 1.0:
         risks.append("limited short-term liquidity")
-    if debt_to_ebitda > 4.0:
-        risks.append("a high debt burden relative to EBITDA")
+    if net_debt_to_ebitda > scoring_profile["debt_warning_threshold"]:
+        risks.append("a high net-debt burden relative to EBITDA")
+    if interest_coverage is not None and interest_coverage < 2.0:
+        risks.append("weak interest coverage")
     if net_margin <= 0:
         risks.append("weak or negative net profitability")
     if free_cash_flow <= 0:
@@ -1419,7 +1611,7 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"Base Srini Credit Score: {base_srinicredit_score}/100\n"
         f"Historical Trend Adjustment: {trend_adjustment:+d}\n"
         f"Uncapped Score: {uncapped_srinicredit_score}/100\n"
-        f"Warning-Based Score Cap: {score_cap}/100\n"
+        f"Financial Warning Score Cap: {score_cap}/100\n"
         f"Final Srini Credit Score: {srinicredit_score}/100"
     )
 
@@ -1499,7 +1691,10 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"Current Ratio: {current_ratio:.2f}\n"
         f"Quick Ratio: {quick_ratio:.2f}\n"
         f"Debt-to-Equity: {debt_to_equity_text}\n"
-        f"Debt-to-EBITDA: {debt_to_ebitda_text}\n"
+        f"Gross Debt-to-EBITDA: {debt_to_ebitda_text}\n"
+        f"Net Debt-to-EBITDA: {net_debt_to_ebitda_text}\n"
+        f"Interest Coverage: {interest_coverage_text}\n"
+        f"Operating Cash Flow-to-Debt: {operating_cash_flow_to_debt_text}\n"
         f"EBITDA Margin: {ebitda_margin:.2%}\n"
         f"Net Margin: {net_margin:.2%}\n"
         f"Return on Equity: {return_on_equity_text}\n"
@@ -1571,6 +1766,12 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         "score_cap_applied": score_cap_applied,
         "financial_warning_count": financial_warning_count,
         "market_warning_count": market_warning_count,
+        "critical_warning_count": critical_warning_count,
+        "major_warning_count": major_warning_count,
+        "informational_warning_count": informational_warning_count,
+        "critical_warning_signals": critical_warning_signals,
+        "major_warning_signals": major_warning_signals,
+        "informational_warning_signals": informational_warning_signals,
         "base_srinicredit_score": base_srinicredit_score,
         "trend_adjustment": trend_adjustment,
         "category_scores": category_scores,
@@ -1580,6 +1781,13 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         "full_memo": full_memo,
         "detailed_output": detailed_output,
         "warning_signals": warning_signals,
+        "net_debt_to_ebitda": net_debt_to_ebitda,
+        "net_debt_to_ebitda_text": net_debt_to_ebitda_text,
+        "interest_coverage": interest_coverage,
+        "interest_coverage_text": interest_coverage_text,
+        "operating_cash_flow_to_debt": operating_cash_flow_to_debt,
+        "operating_cash_flow_to_debt_text": operating_cash_flow_to_debt_text,
+        "interest_coverage_scoring_note": interest_coverage_scoring_note,
         "historical_data": historical_data,
         "raw": {
             "company": company,
@@ -1784,7 +1992,7 @@ def create_credit_pdf(
                 "+/- 5",
             ],
             [
-                "Warning-Based Score Cap",
+                "Financial Warning Score Cap",
                 str(result["score_cap"]),
                 "100",
             ],

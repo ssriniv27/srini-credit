@@ -72,7 +72,7 @@ def display_result(result: dict) -> None:
     st.subheader(f"{company_name} ({ticker})")
     st.caption(
         f"Scoring profile: {result['scoring_profile_name']} | "
-        f"Warning-based score cap: {result['score_cap']}/100"
+        f"Financial warning score cap: {result['score_cap']}/100"
     )
 
     if result["model_scope_warning"]:
@@ -156,24 +156,50 @@ def display_result(result: dict) -> None:
                 f"The uncapped score was "
                 f"{result['uncapped_srinicredit_score']}/100 and was "
                 f"limited to {result['score_cap']}/100 by the model's "
-                f"warning-based cap."
+                f"financial-warning cap. Market warnings do not cap the score."
             )
 
         st.markdown("#### Executive Summary")
         st.write(get_memo_section(result, "Executive Summary"))
 
-        display_warnings = [
-            warning
-            for warning in result["warning_signals"]
-            if warning != result["model_scope_warning"]
-        ]
+        st.markdown("#### Warning Signals")
 
-        if display_warnings:
-            st.markdown("#### Warning Signals")
-            for warning in display_warnings:
+        if result["critical_warning_signals"]:
+            st.markdown("**Critical financial warnings**")
+            for warning in result["critical_warning_signals"]:
+                st.error(warning)
+
+        if result["major_warning_signals"]:
+            st.markdown("**Major financial warnings**")
+            for warning in result["major_warning_signals"]:
                 st.warning(warning)
-        elif not result["model_scope_warning"]:
-            st.success("No major warning signals were detected by the model.")
+
+        if result["informational_warning_signals"]:
+            st.markdown("**Informational warnings**")
+            for warning in result["informational_warning_signals"]:
+                if warning != result["model_scope_warning"]:
+                    st.info(warning)
+
+        if not result["warning_signals"]:
+            st.success("No warning signals were detected by the model.")
+
+        st.markdown("#### Debt-Service Metrics")
+        debt_metric_columns = st.columns(3)
+        with debt_metric_columns[0]:
+            st.metric(
+                "Net Debt / EBITDA",
+                result["net_debt_to_ebitda_text"],
+            )
+        with debt_metric_columns[1]:
+            st.metric(
+                "Interest Coverage",
+                result["interest_coverage_text"],
+            )
+        with debt_metric_columns[2]:
+            st.metric(
+                "Operating Cash Flow / Debt",
+                result["operating_cash_flow_to_debt_text"],
+            )
 
     with market_tab:
         history_frame = pd.DataFrame(result["historical_data"])
