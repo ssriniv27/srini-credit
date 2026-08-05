@@ -84,6 +84,6 @@ Run model validation:
 python validate_model.py
 ```
 
-## Disclaimer
+## Disclaimer pt2
 
 Srini Credit is a financial-screening and educational tool. It is not an official credit rating, investment recommendation, or substitute for professional underwriting and due diligence.
