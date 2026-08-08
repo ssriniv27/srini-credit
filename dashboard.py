@@ -72,11 +72,13 @@ def display_result(result: dict) -> None:
     st.subheader(f"{company_name} ({ticker})")
     st.caption(
         f"Scoring profile: {result['scoring_profile_name']} | "
+        f"Model suitability: {result['model_suitability']} | "
+        f"Confidence: {result['confidence_level']} | "
         f"Financial warning score cap: {result['score_cap']}/100"
     )
 
     if result["model_scope_warning"]:
-        st.info(result["model_scope_warning"])
+        st.warning(result["model_scope_warning"])
 
     score_column, tier_column, trend_column, recommendation_column = st.columns(
         [1, 1, 1, 2]
@@ -105,6 +107,17 @@ def display_result(result: dict) -> None:
             "Lending Recommendation",
             result["lending_recommendation"],
         )
+
+    suitability_column, confidence_column = st.columns(2)
+    with suitability_column:
+        st.metric("Model Suitability", result["model_suitability"])
+    with confidence_column:
+        st.metric("Model Confidence", result["confidence_level"])
+
+    st.caption(
+        f"Suitability: {result['model_suitability_reason']} "
+        f"Confidence: {result['confidence_reason']}"
+    )
 
     category_rows = []
 
@@ -162,6 +175,9 @@ def display_result(result: dict) -> None:
         st.markdown("#### Executive Summary")
         st.write(get_memo_section(result, "Executive Summary"))
 
+        if result.get("liquidity_support_note"):
+            st.info(result["liquidity_support_note"])
+
         st.markdown("#### Warning Signals")
 
         if result["critical_warning_signals"]:
@@ -183,8 +199,8 @@ def display_result(result: dict) -> None:
         if not result["warning_signals"]:
             st.success("No warning signals were detected by the model.")
 
-        st.markdown("#### Debt-Service Metrics")
-        debt_metric_columns = st.columns(3)
+        st.markdown("#### Debt-Service and Liquidity Metrics")
+        debt_metric_columns = st.columns(4)
         with debt_metric_columns[0]:
             st.metric(
                 "Net Debt / EBITDA",
@@ -199,6 +215,11 @@ def display_result(result: dict) -> None:
             st.metric(
                 "Operating Cash Flow / Debt",
                 result["operating_cash_flow_to_debt_text"],
+            )
+        with debt_metric_columns[3]:
+            st.metric(
+                "OCF / Current Liabilities",
+                result["operating_cash_flow_to_current_liabilities_text"],
             )
 
     with market_tab:

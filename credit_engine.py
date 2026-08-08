@@ -348,6 +348,7 @@ SCORING_PROFILES: dict[str, dict[str, Any]] = {
         "free_cash_flow_margin": ((0.20, 8), (0.12, 6), (0.06, 4)),
         "liquidity_warning_threshold": 1.00,
         "debt_warning_threshold": 4.00,
+        "cash_flow_liquidity_support": ((0.75, 14), (0.50, 12), (0.35, 10)),
         "description": (
             "Technology companies are evaluated with higher profitability and "
             "cash-flow expectations because many mature firms in the sector "
@@ -366,6 +367,7 @@ SCORING_PROFILES: dict[str, dict[str, Any]] = {
         "free_cash_flow_margin": ((0.05, 8), (0.03, 6), (0.015, 4)),
         "liquidity_warning_threshold": 0.75,
         "debt_warning_threshold": 4.00,
+        "ocf_to_debt_liquidity_support": ((0.75, 14), (0.50, 12), (0.30, 10), (0.20, 8)),
         "description": (
             "Discount retailers are evaluated with lower liquidity and margin "
             "thresholds to reflect rapid inventory turnover and high-volume, "
@@ -394,18 +396,20 @@ SCORING_PROFILES: dict[str, dict[str, Any]] = {
         "name": "Telecommunications",
         "current_ratio": ((1.20, 10), (1.00, 8), (0.75, 5), (0.60, 2)),
         "quick_ratio": ((1.00, 10), (0.80, 8), (0.60, 6), (0.40, 3)),
-        "debt_to_equity": ((0.50, 10), (1.00, 8), (2.00, 6), (3.00, 3), (4.00, 1)),
-        "debt_to_ebitda": ((2.00, 15), (3.00, 12), (4.00, 9), (5.00, 6), (6.00, 3)),
+        "debt_to_equity": ((0.50, 10), (1.00, 8), (1.50, 5), (2.00, 3), (2.50, 1)),
+        "debt_to_ebitda": ((1.50, 15), (2.00, 12), (2.50, 9), (3.00, 6), (3.50, 3)),
+        "interest_coverage": ((8.0, 5), (6.0, 4), (4.0, 3), (3.0, 2), (2.0, 1)),
         "ebitda_margin": ((0.30, 8), (0.22, 6), (0.15, 4)),
         "net_margin": ((0.12, 8), (0.07, 6), (0.03, 4)),
         "operating_cash_flow_margin": ((0.25, 8), (0.18, 6), (0.10, 4)),
         "free_cash_flow_margin": ((0.15, 8), (0.10, 6), (0.05, 4)),
         "liquidity_warning_threshold": 0.75,
-        "debt_warning_threshold": 5.00,
+        "debt_warning_threshold": 3.25,
         "description": (
-            "Telecommunications companies are evaluated with moderately more "
-            "tolerant leverage thresholds because recurring subscription cash "
-            "flows often support capital-intensive balance sheets."
+            "Telecommunications companies are evaluated with recurring cash-flow "
+            "strength in mind, but leverage and debt-service thresholds are kept "
+            "strict because large structural debt burdens can materially reduce "
+            "financial flexibility."
         ),
     },
     "energy": {
@@ -478,8 +482,12 @@ def _select_scoring_profile(sector: str, industry: str) -> tuple[str, dict[str, 
     return key, SCORING_PROFILES[key]
 
 
-def _get_model_scope_warning(sector: str, industry: str) -> str | None:
-    """Return a warning when the standard model needs specialized analysis."""
+def _classify_model_suitability(
+    sector: str,
+    industry: str,
+    scoring_profile_key: str,
+) -> tuple[str, str]:
+    """Classify how appropriate the current Srini Credit model is."""
 
     sector_text = sector.lower()
     industry_text = industry.lower()
@@ -489,16 +497,58 @@ def _get_model_scope_warning(sector: str, industry: str) -> str | None:
         for term in ("bank", "insurance", "asset management", "credit services")
     ):
         return (
-            "Specialized-model warning: banks, insurers, and other financial "
-            "institutions require capital, reserve, and regulatory ratios that "
-            "are not included in the standard Srini Credit model."
+            "Unsupported business model",
+            "Banks, insurers, and other financial institutions require capital, "
+            "reserve, asset-quality, and regulatory ratios that are not included "
+            "in the standard Srini Credit framework.",
         )
 
-    if "auto - manufacturers" in industry_text or "automobile manufacturers" in industry_text:
+    if any(
+        term in industry_text
+        for term in ("healthcare plans", "managed care", "health insurance")
+    ):
         return (
-            "Specialized-model warning: automakers may include captive-finance "
-            "operations, so consolidated debt and EBITDA can be difficult to "
-            "compare with ordinary industrial companies."
+            "Limited suitability",
+            "Health insurers and managed-care companies have regulated capital, "
+            "claims, reserve, and insurance-liability dynamics that are only "
+            "partially captured by ordinary corporate ratios.",
+        )
+
+    if (
+        "auto - manufacturers" in industry_text
+        or "automobile manufacturers" in industry_text
+    ):
+        return (
+            "Limited suitability",
+            "Automakers may include captive-finance operations, so consolidated "
+            "debt and EBITDA can be difficult to compare with ordinary industrial "
+            "companies.",
+        )
+
+    if scoring_profile_key != "default":
+        return (
+            "Specialized profile",
+            "An industry-adjusted Srini Credit profile is available for this "
+            "company's business model.",
+        )
+
+    return (
+        "Standard model",
+        "The general nonfinancial corporate framework is used for this company.",
+    )
+
+
+def _get_model_scope_warning(
+    model_suitability: str,
+    model_suitability_reason: str,
+) -> str | None:
+    """Return a visible warning when model suitability is limited."""
+
+    if model_suitability in {"Limited suitability", "Unsupported business model"}:
+        return (
+            f"Model-suitability warning: {model_suitability_reason} "
+            "The numeric Srini Credit score should be treated as preliminary "
+            "rather than definitive."
         )
 
     return None
@@ -604,7 +654,15 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     )
     scoring_profile_name = scoring_profile["name"]
     scoring_profile_description = scoring_profile["description"]
-    model_scope_warning = _get_model_scope_warning(sector, industry)
+    model_suitability, model_suitability_reason = _classify_model_suitability(
+        sector,
+        industry,
+        scoring_profile_key,
+    )
+    model_scope_warning = _get_model_scope_warning(
+        model_suitability,
+        model_suitability_reason,
+    )
 
     stock_price = company.get("price")
     stock_price_text = (
@@ -720,7 +778,13 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         net_debt = float(reported_net_debt)
     else:
         net_debt = float(total_debt) - float(cash_and_investments)
-    net_debt_text = format_currency(net_debt)
+
+    if net_debt < 0:
+        net_debt_text = (
+            f"Net cash position ({format_currency(abs(net_debt))} excess cash)"
+        )
+    else:
+        net_debt_text = format_currency(net_debt)
 
     if shareholders_equity <= 0:
         debt_to_equity = float("inf")
@@ -742,7 +806,10 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         debt_to_ebitda = total_debt / ebitda
         net_debt_to_ebitda = net_debt / ebitda
         debt_to_ebitda_text = f"{debt_to_ebitda:.2f}"
-        net_debt_to_ebitda_text = f"{net_debt_to_ebitda:.2f}"
+        if net_debt <= 0:
+            net_debt_to_ebitda_text = "Net cash position"
+        else:
+            net_debt_to_ebitda_text = f"{net_debt_to_ebitda:.2f}"
 
     if (
         is_valid_financial_number(operating_income)
@@ -773,6 +840,15 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         operating_cash_flow_to_debt_text = (
             f"{operating_cash_flow_to_debt:.2%}"
         )
+
+    operating_cash_flow_to_current_liabilities = safe_divide(
+        operating_cash_flow,
+        balance_sheet.get("totalCurrentLiabilities"),
+        "operating cash flow to current liabilities",
+    )
+    operating_cash_flow_to_current_liabilities_text = (
+        f"{operating_cash_flow_to_current_liabilities:.2%}"
+    )
 
     ebitda_margin = safe_divide(ebitda, revenue, "EBITDA margin")
     net_margin = safe_divide(net_income, revenue, "net margin")
@@ -953,7 +1029,40 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         quick_ratio,
         scoring_profile["quick_ratio"],
     )
-    liquidity_score = current_ratio_score + quick_ratio_score
+    conventional_liquidity_score = current_ratio_score + quick_ratio_score
+    liquidity_score = conventional_liquidity_score
+    liquidity_support_applied = False
+    liquidity_support_note: str | None = None
+
+    if scoring_profile_key == "technology":
+        cash_flow_liquidity_score = _score_higher_is_better(
+            operating_cash_flow_to_current_liabilities,
+            scoring_profile["cash_flow_liquidity_support"],
+        )
+        if cash_flow_liquidity_score > liquidity_score:
+            liquidity_score = cash_flow_liquidity_score
+            liquidity_support_applied = True
+            liquidity_support_note = (
+                "Technology liquidity received cash-flow support because "
+                f"operating cash flow equals "
+                f"{operating_cash_flow_to_current_liabilities_text} of current "
+                "liabilities."
+            )
+
+    elif scoring_profile_key == "discount_retail":
+        cash_flow_liquidity_score = _score_higher_is_better(
+            operating_cash_flow_to_debt,
+            scoring_profile["ocf_to_debt_liquidity_support"],
+        )
+        if cash_flow_liquidity_score > liquidity_score:
+            liquidity_score = cash_flow_liquidity_score
+            liquidity_support_applied = True
+            liquidity_support_note = (
+                "Discount-retail liquidity received cash-flow support because "
+                f"operating cash flow equals {operating_cash_flow_to_debt_text} "
+                "of total debt, reducing reliance on static working-capital "
+                "ratios alone."
+            )
 
     debt_to_equity_raw_score = _score_lower_is_better(
         debt_to_equity,
@@ -982,9 +1091,13 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
             "was used as a fallback for five leverage points."
         )
     else:
+        interest_coverage_bands = scoring_profile.get(
+            "interest_coverage",
+            ((8.0, 5), (5.0, 4), (3.0, 3), (2.0, 2), (1.5, 1)),
+        )
         interest_coverage_score = _score_higher_is_better(
             interest_coverage,
-            ((8.0, 5), (5.0, 4), (3.0, 3), (2.0, 2), (1.5, 1)),
+            interest_coverage_bands,
         )
         interest_coverage_scoring_note = None
 
@@ -1228,9 +1341,16 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         )
 
     if current_ratio < scoring_profile["liquidity_warning_threshold"]:
-        major_warning_signals.append(
-            "Short-term liquidity is below the threshold used by the selected industry profile."
-        )
+        if liquidity_support_applied:
+            informational_warning_signals.append(
+                "Conventional short-term liquidity is below the profile threshold, "
+                "but strong cash-flow coverage provided liquidity support in the "
+                "selected industry model."
+            )
+        else:
+            major_warning_signals.append(
+                "Short-term liquidity is below the threshold used by the selected industry profile."
+            )
     if (
         total_debt > 0
         and operating_cash_flow_to_debt < 0.15
@@ -1279,6 +1399,61 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     srinicredit_score = min(uncapped_srinicredit_score, score_cap)
     score_cap_applied = srinicredit_score < uncapped_srinicredit_score
 
+    # Model confidence measures data completeness separately from credit quality.
+    minimum_statement_history = min(
+        len(income_trend_history),
+        len(balance_trend_history),
+        len(cash_flow_trend_history),
+    )
+    confidence_points = 0
+    confidence_notes: list[str] = []
+
+    if minimum_statement_history >= 4:
+        confidence_points += 2
+    elif minimum_statement_history >= 3:
+        confidence_points += 1
+        confidence_notes.append(
+            "Only three comparable annual statement periods were available."
+        )
+    else:
+        confidence_notes.append(
+            "Fewer than three comparable annual statement periods were available."
+        )
+
+    if interest_coverage is not None:
+        confidence_points += 1
+    else:
+        confidence_notes.append(
+            "Interest coverage could not be calculated from the available fields."
+        )
+
+    if beta is not None:
+        confidence_points += 1
+    else:
+        confidence_notes.append("Beta was unavailable.")
+
+    if len(historical_data) >= 252:
+        confidence_points += 1
+    else:
+        confidence_notes.append(
+            "Less than approximately one trading year of market history was available."
+        )
+
+    if model_suitability in {"Unsupported business model", "Limited suitability"}:
+        confidence_level = "Low"
+    elif confidence_points >= 4:
+        confidence_level = "High"
+    elif confidence_points >= 2:
+        confidence_level = "Moderate"
+    else:
+        confidence_level = "Low"
+
+    confidence_reason = (
+        "Data coverage is strong for the selected model."
+        if not confidence_notes
+        else " ".join(confidence_notes)
+    )
+
     if srinicredit_score >= 90:
         credit_tier = "Exceptional"
     elif srinicredit_score >= 80:
@@ -1292,7 +1467,11 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     else:
         credit_tier = "High Risk"
 
-    if srinicredit_score >= 80:
+    if model_suitability == "Unsupported business model":
+        lending_recommendation = "Specialized credit model required"
+    elif model_suitability == "Limited suitability":
+        lending_recommendation = "Specialized analysis recommended"
+    elif srinicredit_score >= 80:
         lending_recommendation = "Strong lending candidate"
     elif srinicredit_score >= 70:
         lending_recommendation = "Acceptable lending candidate"
@@ -1340,8 +1519,10 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     analyst_summary = (
         f"{company_name} ({ticker}) received a final Srini Credit score of "
         f"{srinicredit_score}/100, placing the company in the {credit_tier} "
-        f"tier. The {scoring_profile_name} scoring profile was applied. The "
-        f"score includes a base score of {base_srinicredit_score}/100 and a "
+        f"tier. The {scoring_profile_name} scoring profile was applied. Model "
+        f"suitability is {model_suitability.lower()} with {confidence_level.lower()} "
+        f"confidence. The score includes a base score of "
+        f"{base_srinicredit_score}/100 and a "
         f"historical trend adjustment of {trend_adjustment:+d}. Based on the "
         f"model's evaluation of liquidity, "
         f"leverage, profitability, cash flow, market risk, and historical "
@@ -1354,6 +1535,11 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"{sector} sector. The company is headquartered in {country} and "
         f"trades on the {exchange_name}. Its reported market capitalization "
         f"is {market_cap_text}."
+    )
+
+    model_suitability_analysis = (
+        f"Model Suitability: {model_suitability}. Confidence: {confidence_level}. "
+        f"{model_suitability_reason} {confidence_reason}"
     )
 
     scoring_profile_analysis = (
@@ -1389,6 +1575,7 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"liabilities. Its quick ratio is {quick_ratio:.2f}. "
         f"{liquidity_conclusion} The company earned {liquidity_score}/20 "
         f"points in the liquidity category."
+        + (f" {liquidity_support_note}" if liquidity_support_note else "")
     )
 
     if (
@@ -1570,7 +1757,22 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"{risks_text}."
     )
 
-    if srinicredit_score >= 80:
+    if model_suitability == "Unsupported business model":
+        final_conclusion = (
+            f"The standard Srini Credit framework is not designed to provide a "
+            f"definitive lending conclusion for {company_name}. The displayed "
+            f"numeric score is a preliminary screening result only. A specialized "
+            f"credit model using industry-specific capital, reserve, regulatory, "
+            f"or asset-quality measures is required before a lending decision."
+        )
+    elif model_suitability == "Limited suitability":
+        final_conclusion = (
+            f"The Srini Credit score for {company_name} should be treated as "
+            f"preliminary because this business model is only partially captured "
+            f"by ordinary corporate ratios. Specialized industry analysis should "
+            f"be completed before relying on the lending recommendation."
+        )
+    elif srinicredit_score >= 80:
         final_conclusion = (
             f"{company_name} appears to be a strong lending candidate. The "
             f"company demonstrates sufficient financial capacity to support its "
@@ -1601,8 +1803,11 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
             f"before extending credit."
         )
 
+
     score_breakdown_text = (
         f"Scoring Profile: {scoring_profile_name}\n"
+        f"Model Suitability: {model_suitability}\n"
+        f"Model Confidence: {confidence_level}\n"
         f"Liquidity Contribution: {weighted_liquidity_score}/20\n"
         f"Leverage Contribution: {weighted_leverage_score}/30\n"
         f"Profitability Contribution: {weighted_profitability_score}/20\n"
@@ -1626,6 +1831,7 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"EXECUTIVE SUMMARY\n{analyst_summary}\n\n"
         f"SCORE BREAKDOWN\n{score_breakdown_text}\n\n"
         f"COMPANY OVERVIEW\n{company_overview}\n\n"
+        f"MODEL SUITABILITY\n{model_suitability_analysis}\n\n"
         f"SCORING PROFILE\n{scoring_profile_analysis}\n\n"
         f"LIQUIDITY ANALYSIS\n{liquidity_analysis}\n\n"
         f"LEVERAGE ANALYSIS\n{leverage_analysis}\n\n"
@@ -1695,6 +1901,8 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         f"Net Debt-to-EBITDA: {net_debt_to_ebitda_text}\n"
         f"Interest Coverage: {interest_coverage_text}\n"
         f"Operating Cash Flow-to-Debt: {operating_cash_flow_to_debt_text}\n"
+        f"Operating Cash Flow / Current Liabilities: "
+        f"{operating_cash_flow_to_current_liabilities_text}\n"
         f"EBITDA Margin: {ebitda_margin:.2%}\n"
         f"Net Margin: {net_margin:.2%}\n"
         f"Return on Equity: {return_on_equity_text}\n"
@@ -1735,6 +1943,7 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
     memo_sections = [
         ("Executive Summary", analyst_summary),
         ("Company Overview", company_overview),
+        ("Model Suitability", model_suitability_analysis),
         ("Scoring Profile", scoring_profile_analysis),
         ("Liquidity Analysis", liquidity_analysis),
         ("Leverage Analysis", leverage_analysis),
@@ -1757,6 +1966,10 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         "scoring_profile_key": scoring_profile_key,
         "scoring_profile_name": scoring_profile_name,
         "scoring_profile_description": scoring_profile_description,
+        "model_suitability": model_suitability,
+        "model_suitability_reason": model_suitability_reason,
+        "confidence_level": confidence_level,
+        "confidence_reason": confidence_reason,
         "model_scope_warning": model_scope_warning,
         "credit_tier": credit_tier,
         "lending_recommendation": lending_recommendation,
@@ -1787,6 +2000,14 @@ def analyze_company(ticker: str, api_key: str) -> dict[str, Any]:
         "interest_coverage_text": interest_coverage_text,
         "operating_cash_flow_to_debt": operating_cash_flow_to_debt,
         "operating_cash_flow_to_debt_text": operating_cash_flow_to_debt_text,
+        "operating_cash_flow_to_current_liabilities": (
+            operating_cash_flow_to_current_liabilities
+        ),
+        "operating_cash_flow_to_current_liabilities_text": (
+            operating_cash_flow_to_current_liabilities_text
+        ),
+        "liquidity_support_applied": liquidity_support_applied,
+        "liquidity_support_note": liquidity_support_note,
         "interest_coverage_scoring_note": interest_coverage_scoring_note,
         "historical_data": historical_data,
         "raw": {

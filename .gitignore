@@ -19,3 +19,6 @@ model_validation_results.csv
 
 # Temporary files
 temp.py
+external_validation_results.csv
+validation_summary.txt
+validation_by_sector.csv

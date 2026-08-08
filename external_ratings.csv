@@ -1,0 +1,26 @@
+﻿Ticker,Agency,ExternalRating,Outlook,RatingDate,Source
+MSFT,Standard & Poor's,AAA,,,https://www.microsoft.com/en-us/investor/faq.aspx?CollectionId=null
+AAPL,Standard & Poor's,AA+,Stable,2025-05-05,https://www.sec.gov/Archives/edgar/data/320193/000114036125017410/ny20048442x2_fwp.htm
+GOOGL,Standard & Poor's,AA+,Stable,2026-05-05,https://www.sec.gov/Archives/edgar/data/1652044/000119312526206809/d134313dfwp.htm
+IBM,Standard & Poor's,A-,,2025-12-31,https://www.sec.gov/Archives/edgar/data/51143/000005114326000010/ibm-20251231_d2.htm
+ORCL,Standard & Poor's,BBB,Negative,2025-09-24,https://www.sec.gov/Archives/edgar/data/1341439/000119312525215807/d49252dfwp.htm
+WMT,Standard & Poor's,AA,,2026-04-30,https://stock.walmart.com/sec-filings/all-sec-filings/content/0000104169-26-000102/wmt-20260430.htm
+TGT,Standard & Poor's,A,,2026-01-31,https://corporate.target.com/investors/annual/2025-annual-report/10-k-report/10-k-part-ii/item-7-management-s-discussion-and-analysis-of-financial-condition-and-results-of-operations
+LOW,Standard & Poor's,BBB+,Stable,2026-05-28,https://www.sec.gov/Archives/edgar/data/60667/000006066726000072/low-20260501.htm
+PG,Standard & Poor's,AA-,Stable,2025-06-30,https://www.sec.gov/Archives/edgar/data/80424/000008042425000076/pg-20250630.htm
+PEP,Standard & Poor's,A+,Stable,2025-07-21,https://www.sec.gov/Archives/edgar/data/77476/000110465925069333/tm2516509d7_fwp.htm
+KO,Standard & Poor's,A+,,2025-12-31,https://investors.coca-colacompany.com/filings-reports/all-sec-filings/content/0001628280-26-010047/ko-20251231.htm
+DE,Standard & Poor's,A,Stable,2026-05-03,https://www.sec.gov/Archives/edgar/data/27673/000110465926067314/jdcc-20260503x10q.htm
+GM,Standard & Poor's,BBB,Stable,2026-01-20,https://www.sec.gov/Archives/edgar/data/1467858/000146785826000013/gm-20251231.htm
+F,Standard & Poor's,BBB-,Negative,2025-12-31,https://www.sec.gov/Archives/edgar/data/37996/000003799626000015/f-20251231.htm
+GE,Standard & Poor's,A-,Stable,2025-03-25,https://www.sec.gov/Archives/edgar/data/40545/000004054526000008/ge-20251231.htm
+CSX,Standard & Poor's,BBB+,Stable,2025-12-31,https://www.sec.gov/Archives/edgar/data/277948/000027794826000006/csx-20251231.htm
+XOM,Standard & Poor's,AA-,,2026-03-26,https://investor.exxonmobil.com/sec-filings/all-sec-filings/content/0001193125-26-126679/d137060dfwp.htm
+CVX,Standard & Poor's,AA-,,,https://www.chevron.com/investors/stock-and-dividend
+VZ,Standard & Poor's,BBB+,Stable,2026-03-31,https://www.verizon.com/about/investors/fixed-income
+T,Standard & Poor's,BBB,Stable,2026-06-30,https://investors.att.com/financial-reports/debt/debt-information
+HD,Standard & Poor's,A,Stable,2025-09-08,https://www.sec.gov/Archives/edgar/data/354950/000110465925088305/tm2525583d1_fwp.htm
+UPS,Standard & Poor's,A,,2025-05-12,https://www.sec.gov/Archives/edgar/data/1090727/000110465925047370/tm2514602d3_fwp.htm
+UNH,Standard & Poor's,A+,Negative,2025-06-17,https://www.sec.gov/Archives/edgar/data/731766/000119312525142149/d883518dfwp.htm
+HWM,Standard & Poor's,BBB+,Stable,2025-09-08,https://www.sec.gov/Archives/edgar/data/4281/000000428126000012/hwm-20251231.htm
+BBY,Standard & Poor's,BBB+,Stable,2025-03-17,https://www.sec.gov/Archives/edgar/data/764478/000076447825000007/bby-20250201x10k.htm

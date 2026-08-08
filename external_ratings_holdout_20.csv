@@ -1,0 +1,21 @@
+﻿Ticker,Agency,ExternalRating,Outlook,RatingDate,Source
+AMZN,Standard & Poor's,AA,,2026-07-07,https://www.sec.gov/Archives/edgar/data/1018724/000110465926081334/tm2619352d3_fwp.htm
+CSCO,Standard & Poor's,AA-,,2025-02-19,https://www.sec.gov/Archives/edgar/data/858877/000119312525029708/d892965dfwp.htm
+HON,Standard & Poor's,A,Negative,2026-03-31,https://www.sec.gov/Archives/edgar/data/773840/000077384026000057/hon-20260331.htm
+NKE,Standard & Poor's,A+,,2026-05-31,https://www.sec.gov/Archives/edgar/data/320187/000032018726000088/nke-20260531.htm
+MCD,Standard & Poor's,BBB+,,2025-12-31,https://www.sec.gov/Archives/edgar/data/63908/000006390826000035/mcd-20251231.htm
+COP,Standard & Poor's,A-,Stable,2026-03-31,https://www.sec.gov/Archives/edgar/data/1163165/000116316526000018/cop-20260331.htm
+CARR,Standard & Poor's,BBB+,Stable,2025-12-31,https://www.sec.gov/Archives/edgar/data/1783180/000178318026000008/carr-20251231.htm
+SRE,Standard & Poor's,BBB+,Negative,2026-03-31,https://www.sec.gov/Archives/edgar/data/1032208/000103220826000030/sre-20260331.htm
+GIS,Standard & Poor's,BBB,Stable,2025-04-14,https://www.sec.gov/Archives/edgar/data/40704/000119312525080053/d831081dfwp.htm
+MMM,Standard & Poor's,BBB+,Stable,2026-03-31,https://www.sec.gov/Archives/edgar/data/66740/000006674026000175/mmm-20260331.htm
+JCI,Standard & Poor's,BBB+,Stable,2026-03-31,https://www.sec.gov/Archives/edgar/data/833444/000083344426000050/jci-20260331.htm
+AWK,Standard & Poor's,A,Stable,2025-06-06,https://www.sec.gov/Archives/edgar/data/1410636/000141063626000063/awk-20260331.htm
+KSS,Standard & Poor's,B+,Negative,2026-01-31,https://www.sec.gov/Archives/edgar/data/885639/000119312526115982/kss-20260131.htm
+DXC,Standard & Poor's,BBB-,Stable,2026-03-31,https://www.sec.gov/Archives/edgar/data/1688568/000168856826000022/dxc-20260331.htm
+VST,Standard & Poor's,BBB-,Stable,2025-12-02,https://www.sec.gov/Archives/edgar/data/1692819/000169281926000014/R18.htm
+PRGO,Standard & Poor's,B+,,2026-03-16,https://www.sec.gov/Archives/edgar/data/1585364/000158536426000048/prgo-20260328.htm
+FDX,Standard & Poor's,BBB,Stable,2025-05-31,https://www.sec.gov/Archives/edgar/data/1048911/000104891125000011/fdx-20250531.htm
+DG,Standard & Poor's,BBB,Stable,2026-01-30,https://www.sec.gov/Archives/edgar/data/29534/000110465926032325/dg-20260130x10k.htm
+SYY,Standard & Poor's,BBB,Stable,2026-02-10,https://www.sec.gov/Archives/edgar/data/96021/000119312526044865/d28016dfwp.htm
+CP,Standard & Poor's,BBB+,Positive,2026-03-31,https://www.sec.gov/Archives/edgar/data/16875/000001687526000015/cp-20260331.htm

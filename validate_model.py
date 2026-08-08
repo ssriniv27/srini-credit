@@ -12,13 +12,13 @@ from credit_engine import (
 
 
 TICKERS_TO_TEST = [
-    "NVDA", "AAPL", "MSFT", "GOOGL", "ORCL", "IBM",
-    "WMT", "COST", "TGT", "HD", "LOW", "KO", "PEP", "PG",
-    "CAT", "DE", "HON", "UPS", "LMT",
-    "XOM", "CVX", "COP",
-    "VZ", "T",
-    "F", "GM",
+    "MSFT", "AAPL", "GOOGL", "IBM", "ORCL",
+    "WMT", "TGT", "LOW", "PG", "PEP",
+    "KO", "DE", "GM", "F", "GE",
+    "CSX", "XOM", "CVX", "VZ", "T",
+    "HD", "UPS", "UNH", "HWM", "BBY",
 ]
+
 
 
 def main() -> None:
@@ -52,6 +52,8 @@ def main() -> None:
                 "Sector": result["sector"],
                 "Industry": result["industry"],
                 "Scoring Profile": result["scoring_profile_name"],
+                "Model Suitability": result["model_suitability"],
+                "Model Confidence": result["confidence_level"],
                 "Liquidity": category_scores["Liquidity"],
                 "Leverage": category_scores["Leverage"],
                 "Profitability": category_scores["Profitability"],
@@ -73,6 +75,10 @@ def main() -> None:
                 "Net Debt to EBITDA": result["net_debt_to_ebitda_text"],
                 "Interest Coverage": result["interest_coverage_text"],
                 "Operating Cash Flow to Debt": result["operating_cash_flow_to_debt_text"],
+                "Operating Cash Flow to Current Liabilities": (
+                    result["operating_cash_flow_to_current_liabilities_text"]
+                ),
+                "Liquidity Support Applied": result["liquidity_support_applied"],
                 "Warning Count": len(result["warning_signals"]),
                 "Model Scope Warning": result["model_scope_warning"] or "",
                 "Warnings": " | ".join(result["warning_signals"]),
